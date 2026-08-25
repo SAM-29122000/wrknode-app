@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { stripe } from "@/lib/stripe";
+import { getStripe } from "@/lib/stripe";
 import type Stripe from "stripe";
 
 // Stripe needs the raw body to verify the webhook signature.
@@ -18,7 +18,7 @@ export async function POST(req: Request) {
   let event: Stripe.Event;
   try {
     if (!signature) throw new Error("Missing signature header");
-    event = stripe.webhooks.constructEvent(body, signature, webhookSecret);
+    event = getStripe().webhooks.constructEvent(body, signature, webhookSecret);
   } catch (err) {
     const message = err instanceof Error ? err.message : "Invalid signature";
     return NextResponse.json({ error: message }, { status: 400 });

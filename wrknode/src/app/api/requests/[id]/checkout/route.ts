@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { stripe } from "@/lib/stripe";
+import { getStripe } from "@/lib/stripe";
 
 export async function POST(req: Request, { params }: { params: { id: string } }) {
   const session = await getServerSession(authOptions);
@@ -33,7 +33,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   const origin = new URL(req.url).origin;
   const currency = request.region === "INDIA" ? "inr" : "usd";
 
-  const checkoutSession = await stripe.checkout.sessions.create({
+  const checkoutSession = await getStripe().checkout.sessions.create({
     mode: "payment",
     customer_email: session.user.email ?? undefined,
     line_items: [
