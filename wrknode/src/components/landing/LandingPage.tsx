@@ -4,29 +4,13 @@ import { useEffect, useRef } from "react";
 import { landingCss } from "./styles";
 import { landingBodyHtml } from "./markup";
 import { initLanding } from "./initLanding";
+import { loadScript } from "@/lib/loadScript";
 
 const SCRIPT_SRCS = [
   "https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js",
   "https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js",
   "https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js",
 ];
-
-function loadScript(src: string): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const existing = document.querySelector(`script[src="${src}"]`);
-    if (existing) {
-      resolve();
-      return;
-    }
-    const script = document.createElement("script");
-    script.src = src;
-    script.crossOrigin = "anonymous";
-    script.referrerPolicy = "no-referrer";
-    script.onload = () => resolve();
-    script.onerror = () => reject(new Error(`Failed to load ${src}`));
-    document.body.appendChild(script);
-  });
-}
 
 export default function LandingPage() {
   const rootRef = useRef<HTMLDivElement>(null);

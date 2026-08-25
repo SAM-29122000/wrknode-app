@@ -4,6 +4,13 @@ import { Suspense, useState, type FormEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { signIn } from "next-auth/react";
 import Link from "next/link";
+import AuthShell from "@/components/auth/AuthShell";
+
+const inputClass =
+  "w-full rounded-lg border border-[#F2EEE4]/20 bg-[#F2EEE4]/[0.06] px-4 py-3 font-['IBM_Plex_Sans',sans-serif] text-[0.98rem] text-[#F2EEE4] placeholder:text-[#F2EEE4]/35 focus:border-[#E4CE93] focus:outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#E4CE93]";
+
+const labelClass =
+  "mb-1.5 block font-['IBM_Plex_Mono',monospace] text-[0.72rem] uppercase tracking-[0.08em] text-[#ADB4CC]";
 
 function LoginForm() {
   const router = useRouter();
@@ -38,11 +45,24 @@ function LoginForm() {
   }
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-sm flex-col justify-center bg-white px-4 text-gray-900">
-      <h1 className="mb-6 text-2xl font-semibold">Log in</h1>
-      <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+    <AuthShell
+      eyebrow="Client login"
+      title="Welcome back."
+      subtitle="Sign in to see your requests, quotes, and payment status."
+      heroHeadline="Never let a lead go cold again."
+      heroSub="Your requests, quotes, and build status — all in one place."
+      footer={
+        <>
+          No account?{" "}
+          <Link className="text-[#E4CE93] underline underline-offset-2" href="/signup">
+            Sign up
+          </Link>
+        </>
+      }
+    >
+      <form onSubmit={handleSubmit} className="flex flex-col gap-5">
         <div>
-          <label className="mb-1 block text-sm font-medium" htmlFor="email">
+          <label className={labelClass} htmlFor="email">
             Email
           </label>
           <input
@@ -51,11 +71,12 @@ function LoginForm() {
             required
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="w-full rounded-md border border-gray-300 px-3 py-2"
+            className={inputClass}
+            placeholder="you@example.com"
           />
         </div>
         <div>
-          <label className="mb-1 block text-sm font-medium" htmlFor="password">
+          <label className={labelClass} htmlFor="password">
             Password
           </label>
           <input
@@ -64,25 +85,19 @@ function LoginForm() {
             required
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="w-full rounded-md border border-gray-300 px-3 py-2"
+            className={inputClass}
           />
         </div>
-        {error && <p className="text-sm text-red-600">{error}</p>}
+        {error && <p className="text-sm text-[#E8837A]">{error}</p>}
         <button
           type="submit"
           disabled={loading}
-          className="rounded-md bg-black px-4 py-2 text-white disabled:opacity-50"
+          className="mt-1 rounded-lg bg-[#C9A24B] px-4 py-3 font-['IBM_Plex_Sans',sans-serif] text-[1rem] font-semibold text-[#0B0F1E] transition-shadow hover:shadow-[0_10px_26px_rgba(201,162,75,0.4)] disabled:opacity-50"
         >
           {loading ? "Logging in..." : "Log in"}
         </button>
       </form>
-      <p className="mt-4 text-sm text-gray-600">
-        No account?{" "}
-        <Link className="underline" href="/signup">
-          Sign up
-        </Link>
-      </p>
-    </main>
+    </AuthShell>
   );
 }
 
