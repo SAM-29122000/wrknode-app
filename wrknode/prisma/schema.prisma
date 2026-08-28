@@ -105,3 +105,27 @@ enum Region {
   INDIA
   INTERNATIONAL
 }
+
+// --- Public pricing page ---
+// Plans shown on /pricing. Editable via /admin/plans without a deploy.
+
+model Plan {
+  id        String       @id @default(cuid())
+  name      String
+  tagline   String
+  priceINR  Int // in paise
+  priceUSD  Int // in cents
+  features  String[]
+  ctaType   PlanCtaType  @default(CHECKOUT)
+  isPopular Boolean      @default(false)
+  isActive  Boolean      @default(true)
+  sortOrder Int          @default(0)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+}
+
+enum PlanCtaType {
+  CHECKOUT // one-time Stripe payment, immediately
+  SIGNUP // send to /signup, then the normal request/quote flow
+  CONTACT // send to the landing page's lead form
+}

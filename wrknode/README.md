@@ -74,6 +74,22 @@ Prisma adapter), a dashboard where a logged-in client sees their own
   was tried first as the AI provider but its API is blocked by its own
   Cloudflare bot-protection — don't reintroduce it without confirming
   that's fixed.
+- `/pricing` is a public page listing active `Plan` rows (Postgres, editable
+  without a deploy). Manage plans at `/admin/plans` (ADMIN role required —
+  same role field used elsewhere, still set manually via `npx prisma
+  studio` until there's a way to promote a user in the UI). Each plan's
+  button does one of three things (`ctaType`): `CHECKOUT` starts an instant
+  Stripe Checkout (reuses the exact same request/quote/pay model as the
+  dashboard — a plan purchase just creates a pre-quoted `ClientRequest`,
+  see `src/app/api/plans/[id]/purchase/route.ts`), `SIGNUP` sends the
+  visitor to `/signup`, `CONTACT` sends them to the landing page's lead
+  form (`/#access`). No new payment integration was added — Stripe
+  Checkout itself can offer UPI/netbanking/wallets alongside cards; enable
+  those in the Stripe Dashboard under Settings → Payment methods rather
+  than integrating any of them separately.
+- New schema change (`Plan` model) needs a fresh migration — see step 3
+  under Setup; run `npx prisma migrate dev --name add_plans` after pulling
+  this. No plans exist until you add some at `/admin/plans/new`.
 
 ## Deploying
 
