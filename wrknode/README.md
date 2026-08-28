@@ -87,9 +87,11 @@ Prisma adapter), a dashboard where a logged-in client sees their own
   Checkout itself can offer UPI/netbanking/wallets alongside cards; enable
   those in the Stripe Dashboard under Settings → Payment methods rather
   than integrating any of them separately.
-- New schema change (`Plan` model) needs a fresh migration — see step 3
-  under Setup; run `npx prisma migrate dev --name add_plans` after pulling
-  this. No plans exist until you add some at `/admin/plans/new`.
+- New schema change (`Plan` model): for **local dev**, run `npx prisma
+  migrate dev` after pulling this to apply it to your local database. For
+  **production**, it applies itself automatically — see the migration note
+  under Deploying below. No plans exist until you add some at
+  `/admin/plans/new`.
 
 ## Deploying
 
@@ -110,3 +112,9 @@ The Netlify site currently serving wrknode.com was set up via drag-and-drop
    `STRIPE_WEBHOOK_SECRET`.
 4. Trigger a deploy. The custom domain is already attached to this Netlify
    site, so no DNS changes are needed.
+
+**Database migrations on deploy:** `netlify.toml`'s build command runs
+`npx prisma migrate deploy` before `next build`, so any pending migration
+(like `Plan`) applies to the production database automatically on every
+deploy — no manual step needed. `migrate deploy` only applies migrations
+that haven't run yet, so it's safe to run on every build.
