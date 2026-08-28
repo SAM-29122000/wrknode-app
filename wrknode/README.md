@@ -58,6 +58,22 @@ Prisma adapter), a dashboard where a logged-in client sees their own
   (`https://capricornxd.app.n8n.cloud/webhook/wrknode-lead`) — it doesn't
   touch this app's database. Don't edit that URL without updating the n8n
   workflow ("Wrknode Lead Automation") to match.
+- `POST /api/requests` (the dashboard's "New request" form) also calls that
+  same n8n webhook after saving to the database, with `source:
+  "dashboard_quote_request"` so the workflow knows not to treat the sender as
+  a brand-new lead. See `notifyLeadAutomation` in
+  `src/app/api/requests/route.ts`. A failure to reach n8n never blocks the
+  request from being saved — it's logged and swallowed.
+- The n8n workflow ("Wrknode Lead Automation") now runs an AI Agent (Google
+  Gemini, free tier — credential "Google Gemini(PaLM) Api account") that
+  reads the submitted message and writes a tailored reply plus a lead score
+  (HOT/WARM/COLD) and a one-line summary for the owner notification email.
+  It branches on `source`: `dashboard_quote_request` skips the marketing
+  lead Data Table (already stored in this app's own Postgres DB via
+  Prisma); anything else (landing page) still gets stored there. GoRouter
+  was tried first as the AI provider but its API is blocked by its own
+  Cloudflare bot-protection — don't reintroduce it without confirming
+  that's fixed.
 
 ## Deploying
 
