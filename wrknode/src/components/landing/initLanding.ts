@@ -482,7 +482,7 @@ export function initLanding() {
   const errorEl = document.getElementById("formError");
   const submitBtn = document.getElementById("submitBtn") as HTMLButtonElement | null;
   const successState = document.getElementById("successState");
-  const WEBHOOK_URL = "https://capricornxd.app.n8n.cloud/webhook/wrknode-lead";
+  const LEADS_URL = "/api/leads";
 
   function onSubmit(e: Event) {
     e.preventDefault();
@@ -504,19 +504,23 @@ export function initLanding() {
       submitBtn.textContent = "Submitting...";
     }
 
-    fetch(WEBHOOK_URL, {
+    fetch(LEADS_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, email, message, submittedAt: new Date().toISOString() }),
+      body: JSON.stringify({ name, email, message }),
     })
-      .then(() => {
+      .then(async (res) => {
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data.error || "Something went wrong — please try again.");
+        }
         if (form) form.style.display = "none";
         if (successState) successState.classList.add("show");
       })
       .catch((err) => {
         console.error("Submit error:", err);
         if (errorEl) {
-          errorEl.textContent = "Something went wrong — please try again.";
+          errorEl.textContent = err instanceof Error ? err.message : "Something went wrong — please try again.";
           (errorEl as HTMLElement).style.display = "block";
         }
         if (submitBtn) {

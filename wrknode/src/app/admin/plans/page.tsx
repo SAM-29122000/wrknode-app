@@ -4,6 +4,7 @@ import Link from "next/link";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import PlanRowActions from "@/components/admin/PlanRowActions";
+import AdminNav from "@/components/admin/AdminNav";
 
 export default async function AdminPlansPage() {
   const session = await getServerSession(authOptions);
@@ -19,6 +20,7 @@ export default async function AdminPlansPage() {
 
   return (
     <main className="mx-auto min-h-screen max-w-4xl bg-white px-4 py-10 text-gray-900">
+      <AdminNav active="plans" />
       <div className="mb-8 flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold">Pricing plans</h1>

@@ -129,3 +129,20 @@ enum PlanCtaType {
   SIGNUP // send to /signup, then the normal request/quote flow
   CONTACT // send to the landing page's lead form
 }
+
+// --- Marketing leads (landing page) ---
+// The single source of truth for "someone submitted the lead form" —
+// replaces n8n's own internal Data Table, which duplicated this. Written
+// by this app's own /api/leads route, which then notifies the n8n AI
+// workflow; n8n no longer stores its own copy.
+
+model Lead {
+  id        String   @id @default(cuid())
+  name      String
+  email     String
+  message   String   @db.Text
+  source    String   @default("landing_page")
+  createdAt DateTime @default(now())
+
+  @@index([email, createdAt])
+}

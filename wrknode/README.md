@@ -1,8 +1,9 @@
 # Wrknode
 
 Next.js (App Router) app serving both the public wrknode.com marketing page
-(`/`, lead capture posts to an existing n8n webhook — untouched) and a client
-portal: email/password login (Auth.js / NextAuth v4, Credentials provider +
+(`/`, lead capture posts to this app's own `/api/leads`, which stores the
+lead in Postgres and notifies the n8n AI workflow) and a client portal:
+email/password login (Auth.js / NextAuth v4, Credentials provider +
 Prisma adapter), a dashboard where a logged-in client sees their own
 `ClientRequest` rows, and Razorpay Checkout to pay a quoted price. (Stripe
 was tried first, but Stripe requires an invite to sign up for accounts based
@@ -67,26 +68,39 @@ in India, so this switched to Razorpay, which doesn't.)
   on `INTERNATIONAL`-region checkout in production.
 - The `/` route is the existing wrknode.com marketing page, ported as-is
   (same CSS/animation/copy) into `src/components/landing/`. Its "Get Early
-  Access" form still posts straight to the n8n webhook
-  (`https://capricornxd.app.n8n.cloud/webhook/wrknode-lead`) — it doesn't
-  touch this app's database. Don't edit that URL without updating the n8n
-  workflow ("Wrknode Lead Automation") to match.
-- `POST /api/requests` (the dashboard's "New request" form) also calls that
-  same n8n webhook after saving to the database, with `source:
-  "dashboard_quote_request"` so the workflow knows not to treat the sender as
-  a brand-new lead. See `notifyLeadAutomation` in
-  `src/app/api/requests/route.ts`. A failure to reach n8n never blocks the
-  request from being saved — it's logged and swallowed.
-- The n8n workflow ("Wrknode Lead Automation") now runs an AI Agent (Google
+  Access" form posts to this app's own `POST /api/leads`
+  (`src/app/api/leads/route.ts`) — not directly to n8n anymore (Phase-2:
+  see below). That route validates input, skips creating a duplicate if the
+  same email submitted again within 10 minutes, caps a single email to 5
+  submissions/day (a basic abuse guard — not real IP-based rate limiting,
+  which would need external state this app doesn't have), writes a `Lead`
+  row, then calls `notifyLeadAutomation` (`src/lib/notifyLeadAutomation.ts`,
+  shared with `/api/requests`) to trigger the n8n AI workflow. A failure to
+  reach n8n never blocks the lead from being saved — it's logged and
+  swallowed.
+- **`Lead` (Postgres) is now the single source of truth for marketing
+  leads** — n8n's own internal Data Table ("Store Lead" node in the
+  "Wrknode Lead Automation" workflow) is disabled, not deleted, since it
+  became redundant with this. n8n passes a disabled node's input through
+  unchanged, so nothing else in that workflow needed to change. View leads
+  at `/admin/leads` (ADMIN role required, same as `/admin/plans`).
+- `POST /api/requests` (the dashboard's "New request" form) also calls the
+  n8n webhook after saving to the database, with `source:
+  "dashboard_quote_request"` so the workflow knows not to treat the sender
+  as a brand-new lead (it does **not** write a `Lead` row — that's for
+  anonymous landing-page submissions specifically; a dashboard request is
+  already a `ClientRequest` tied to a real account).
+- The n8n workflow ("Wrknode Lead Automation") runs an AI Agent (Google
   Gemini, free tier — credential "Google Gemini(PaLM) Api account") that
   reads the submitted message and writes a tailored reply plus a lead score
   (HOT/WARM/COLD) and a one-line summary for the owner notification email.
-  It branches on `source`: `dashboard_quote_request` skips the marketing
-  lead Data Table (already stored in this app's own Postgres DB via
-  Prisma); anything else (landing page) still gets stored there. GoRouter
-  was tried first as the AI provider but its API is blocked by its own
-  Cloudflare bot-protection — don't reintroduce it without confirming
-  that's fixed.
+  That score/summary currently only reaches you via that notification
+  email — it isn't written back to `Lead` in Postgres yet, so `/admin/leads`
+  shows raw submissions only, no AI scoring. Reporting it back would need a
+  new step in the n8n workflow (an HTTP call to a new endpoint in this app)
+  — a natural next Phase-2 increment, not done yet. GoRouter was tried
+  first as the AI provider but its API is blocked by its own Cloudflare
+  bot-protection — don't reintroduce it without confirming that's fixed.
 - `/pricing` is a public page listing active `Plan` rows (Postgres, editable
   without a deploy). Manage plans at `/admin/plans` (ADMIN role required —
   same role field used elsewhere, still set manually via `npx prisma
