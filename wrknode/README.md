@@ -4,7 +4,9 @@ Next.js (App Router) app serving both the public wrknode.com marketing page
 (`/`, lead capture posts to an existing n8n webhook — untouched) and a client
 portal: email/password login (Auth.js / NextAuth v4, Credentials provider +
 Prisma adapter), a dashboard where a logged-in client sees their own
-`ClientRequest` rows, and Stripe Checkout to pay a quoted price.
+`ClientRequest` rows, and Razorpay Checkout to pay a quoted price. (Stripe
+was tried first, but Stripe requires an invite to sign up for accounts based
+in India, so this switched to Razorpay, which doesn't.)
 
 ## Setup
 
@@ -46,12 +48,23 @@ Prisma adapter), a dashboard where a logged-in client sees their own
   are redirected to `/login`.
 - New signups always get `role: CLIENT`. To create an admin, update a user's
   `role` directly in the database (e.g. via `npx prisma studio`).
-- There's no admin UI yet — quote a request by setting its `status` to
-  `QUOTED` and `quotedPrice` (smallest currency unit, e.g. paise/cents)
-  directly in the database. The client's dashboard then shows a "Pay now"
-  button using Stripe Checkout; a successful payment (via the
-  `/api/stripe/webhook` route) sets `paidAt` and moves the request to
-  `IN_PROGRESS`.
+- There's no admin UI for requests yet (there is one for `Plan`s, see
+  below) — quote a request by setting its `status` to `QUOTED` and
+  `quotedPrice` (smallest currency unit, e.g. paise/cents) directly in the
+  database. The client's dashboard then shows a "Pay now" button, which
+  creates a Razorpay order (`src/lib/razorpay.ts`) and opens Razorpay's
+  Checkout modal client-side (`src/lib/razorpayCheckout.ts` — Razorpay's
+  flow is a JS widget, not a hosted redirect page like Stripe's). The
+  **webhook** (`/api/razorpay/webhook`, listening for `payment.captured`)
+  is what actually sets `paidAt` and moves the request to `IN_PROGRESS` —
+  never the browser callback, which only drives the redirect. Razorpay's
+  `key_id` is safe to expose client-side (unlike Stripe's secret key);
+  `key_secret` and the webhook secret stay server-only.
+- **International (USD) payments on Razorpay require separate approval**
+  from Razorpay before they'll actually work — this wasn't verified while
+  building this, only that the API call shape is correct. Confirm
+  international payments are enabled on the Razorpay account before relying
+  on `INTERNATIONAL`-region checkout in production.
 - The `/` route is the existing wrknode.com marketing page, ported as-is
   (same CSS/animation/copy) into `src/components/landing/`. Its "Get Early
   Access" form still posts straight to the n8n webhook
@@ -79,14 +92,13 @@ Prisma adapter), a dashboard where a logged-in client sees their own
   same role field used elsewhere, still set manually via `npx prisma
   studio` until there's a way to promote a user in the UI). Each plan's
   button does one of three things (`ctaType`): `CHECKOUT` starts an instant
-  Stripe Checkout (reuses the exact same request/quote/pay model as the
+  Razorpay Checkout (reuses the exact same request/quote/pay model as the
   dashboard — a plan purchase just creates a pre-quoted `ClientRequest`,
   see `src/app/api/plans/[id]/purchase/route.ts`), `SIGNUP` sends the
   visitor to `/signup`, `CONTACT` sends them to the landing page's lead
-  form (`/#access`). No new payment integration was added — Stripe
-  Checkout itself can offer UPI/netbanking/wallets alongside cards; enable
-  those in the Stripe Dashboard under Settings → Payment methods rather
-  than integrating any of them separately.
+  form (`/#access`). Razorpay Checkout can offer UPI/netbanking/wallets
+  alongside cards without any extra integration work — enable whichever you
+  want in the Razorpay Dashboard.
 - New schema change (`Plan` model): for **local dev**, run `npx prisma
   migrate dev` after pulling this to apply it to your local database. For
   **production**, it applies itself automatically — see the migration note
@@ -105,11 +117,12 @@ The Netlify site currently serving wrknode.com was set up via drag-and-drop
    Next.js Runtime handles the rest automatically).
 2. Add environment variables in **Project configuration → Environment
    variables**: `DATABASE_URL`, `NEXTAUTH_SECRET`, `NEXTAUTH_URL` (set to
-   `https://wrknode.com`), `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`.
-3. In Stripe, add a webhook endpoint pointing to
-   `https://wrknode.com/api/stripe/webhook` listening for
-   `checkout.session.completed`, and use its signing secret for
-   `STRIPE_WEBHOOK_SECRET`.
+   `https://wrknode.com`), `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`,
+   `RAZORPAY_WEBHOOK_SECRET`.
+3. In Razorpay, add a webhook endpoint pointing to
+   `https://wrknode.com/api/razorpay/webhook`, subscribed to
+   `payment.captured`, and use its signing secret for
+   `RAZORPAY_WEBHOOK_SECRET` (this is separate from `RAZORPAY_KEY_SECRET`).
 4. Trigger a deploy. The custom domain is already attached to this Netlify
    site, so no DNS changes are needed.
 

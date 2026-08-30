@@ -181,7 +181,7 @@ export default function PlanForm({ plan }: { plan?: Plan }) {
           onChange={(e) => setField("ctaType", e.target.value as PlanFormValues["ctaType"])}
           className={inputClass}
         >
-          <option value="CHECKOUT">Buy now — instant Stripe checkout</option>
+          <option value="CHECKOUT">Buy now — instant Razorpay checkout</option>
           <option value="SIGNUP">Get started — send to signup</option>
           <option value="CONTACT">Talk to us — send to contact form</option>
         </select>

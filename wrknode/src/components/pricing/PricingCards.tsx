@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Plan } from "@prisma/client";
+import { openRazorpayCheckout } from "@/lib/razorpayCheckout";
 
 const inrFormatter = new Intl.NumberFormat("en-IN", {
   style: "currency",
@@ -51,13 +52,19 @@ export default function PricingCards({ plans }: { plans: Plan[] }) {
 
     const data = await res.json().catch(() => ({}));
 
-    if (!res.ok || !data.url) {
+    if (!res.ok || !data.orderId) {
       setError(data.error ?? "Couldn't start checkout.");
       setLoadingPlanId(null);
       return;
     }
 
-    window.location.href = data.url;
+    try {
+      await openRazorpayCheckout(data);
+      window.location.href = "/dashboard?paid=1";
+    } catch {
+      setError("Payment cancelled.");
+      setLoadingPlanId(null);
+    }
   }
 
   return (

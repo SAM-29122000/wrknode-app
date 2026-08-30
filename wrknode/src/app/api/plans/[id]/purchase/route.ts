@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { getStripe } from "@/lib/stripe";
+import { createRazorpayOrder, getRazorpayKeyId } from "@/lib/razorpay";
 
 export async function POST(req: Request, { params }: { params: { id: string } }) {
   const session = await getServerSession(authOptions);
@@ -20,6 +20,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   const body = await req.json().catch(() => null);
   const region = body?.region === "INTERNATIONAL" ? "INTERNATIONAL" : "INDIA";
   const quotedPrice = region === "INDIA" ? plan.priceINR : plan.priceUSD;
+  const currency = region === "INDIA" ? "INR" : "USD";
 
   // Reuse the exact same request/quote/checkout model the dashboard already
   // uses, instead of building a second payment path. This purchase just
@@ -34,38 +35,24 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     },
   });
 
-  const origin = new URL(req.url).origin;
-  const currency = region === "INDIA" ? "inr" : "usd";
-
-  const checkoutSession = await getStripe().checkout.sessions.create({
-    mode: "payment",
-    customer_email: session.user.email ?? undefined,
-    line_items: [
-      {
-        price_data: {
-          currency,
-          unit_amount: quotedPrice,
-          product_data: {
-            name: `Wrknode — ${plan.name}`,
-            description: plan.tagline,
-          },
-        },
-        quantity: 1,
-      },
-    ],
-    metadata: {
-      requestId: request.id,
-      userId: session.user.id,
-      planId: plan.id,
-    },
-    success_url: `${origin}/dashboard?paid=1`,
-    cancel_url: `${origin}/dashboard?paid=0`,
+  const order = await createRazorpayOrder({
+    amount: quotedPrice,
+    currency,
+    receipt: request.id,
+    notes: { requestId: request.id, userId: session.user.id, planId: plan.id },
   });
 
   await prisma.clientRequest.update({
     where: { id: request.id },
-    data: { stripeCheckoutSessionId: checkoutSession.id },
+    data: { razorpayOrderId: order.id },
   });
 
-  return NextResponse.json({ url: checkoutSession.url });
+  return NextResponse.json({
+    orderId: order.id,
+    amount: quotedPrice,
+    currency,
+    keyId: getRazorpayKeyId(),
+    description: `Wrknode — ${plan.name}`,
+    prefillEmail: session.user.email ?? undefined,
+  });
 }

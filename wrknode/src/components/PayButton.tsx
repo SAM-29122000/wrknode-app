@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { openRazorpayCheckout } from "@/lib/razorpayCheckout";
 
 export default function PayButton({ requestId }: { requestId: string }) {
   const [loading, setLoading] = useState(false);
@@ -13,13 +14,19 @@ export default function PayButton({ requestId }: { requestId: string }) {
     const res = await fetch(`/api/requests/${requestId}/checkout`, { method: "POST" });
     const data = await res.json().catch(() => ({}));
 
-    if (!res.ok || !data.url) {
+    if (!res.ok || !data.orderId) {
       setError(data.error ?? "Couldn't start checkout.");
       setLoading(false);
       return;
     }
 
-    window.location.href = data.url;
+    try {
+      await openRazorpayCheckout(data);
+      window.location.href = "/dashboard?paid=1";
+    } catch {
+      setError("Payment cancelled.");
+      setLoading(false);
+    }
   }
 
   return (

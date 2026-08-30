@@ -86,9 +86,9 @@ model ClientRequest {
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
 
-  // Set once Stripe confirms payment for this request's quotedPrice.
-  paidAt                  DateTime?
-  stripeCheckoutSessionId String?   @unique
+  // Set once Razorpay confirms payment for this request's quotedPrice.
+  paidAt          DateTime?
+  razorpayOrderId String?   @unique
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
@@ -125,7 +125,7 @@ model Plan {
 }
 
 enum PlanCtaType {
-  CHECKOUT // one-time Stripe payment, immediately
+  CHECKOUT // one-time Razorpay payment, immediately
   SIGNUP // send to /signup, then the normal request/quote flow
   CONTACT // send to the landing page's lead form
 }
