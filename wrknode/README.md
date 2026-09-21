@@ -190,7 +190,13 @@ Next.js API routes.
    `JOB_AGENT_WHATSAPP_TO` send the shown join code to the sandbox number.
    Note the sandbox needs re-joining every 72 hours; a real WhatsApp
    Business number (a few days' approval through Twilio) removes that.
-3. Create an OpenAI API key.
+3. Create a free Gemini API key at aistudio.google.com/apikey (no billing
+   needed — this is why Gemini was used instead of OpenAI, which requires
+   prepaid credits even for light usage). `GEMINI_MODEL` defaults to an
+   alias (`gemini-flash-lite-latest`) rather than a pinned version, since
+   Google deprecated two specific dated model names while this was being
+   built ("no longer available to new users") — aliases don't break that
+   way.
 4. Create a Google Cloud OAuth client (Desktop app type is simplest, no
    consent-screen review needed for personal use), then mint a refresh
    token once via

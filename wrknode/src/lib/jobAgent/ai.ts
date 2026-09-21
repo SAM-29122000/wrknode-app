@@ -1,28 +1,40 @@
 import { CANDIDATE_EMAIL, CANDIDATE_NAME, CANDIDATE_SUMMARY } from "./resumeProfile";
 
+// Uses Google's free-tier Gemini API (no billing required, unlike
+// OpenAI) — the same provider already used by the wrknode landing page's
+// n8n lead-reply workflow. Every caller below passes exactly one system
+// message and one user message, so this only needs to support that shape.
 async function chatCompletion(messages: { role: string; content: string }[], temperature: number) {
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) throw new Error("OPENAI_API_KEY is not set");
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) throw new Error("GEMINI_API_KEY is not set");
 
-  const res = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model: process.env.OPENAI_MODEL ?? "gpt-4o-mini",
-      messages,
-      temperature,
-    }),
-  });
+  const systemMessage = messages.find((m) => m.role === "system")?.content;
+  const userMessage = messages.find((m) => m.role === "user")?.content ?? "";
+  // An alias, not a pinned version — Google has deprecated specific
+  // dated/numbered models twice just while building this integration
+  // ("no longer available to new users"). Aliases keep pointing at
+  // whatever's current instead of breaking on the next deprecation.
+  const model = process.env.GEMINI_MODEL ?? "gemini-flash-lite-latest";
+
+  const res = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        ...(systemMessage ? { systemInstruction: { parts: [{ text: systemMessage }] } } : {}),
+        contents: [{ role: "user", parts: [{ text: userMessage }] }],
+        generationConfig: { temperature },
+      }),
+    }
+  );
 
   if (!res.ok) {
-    throw new Error(`OpenAI request failed: ${res.status} ${await res.text().catch(() => "")}`);
+    throw new Error(`Gemini request failed: ${res.status} ${await res.text().catch(() => "")}`);
   }
 
   const data = await res.json();
-  return data.choices?.[0]?.message?.content ?? "";
+  return data.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
 }
 
 function parseJsonLoose<T>(raw: string, fallback: T): T {
