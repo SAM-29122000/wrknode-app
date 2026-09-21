@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { sendApplicationEmail } from "@/lib/jobAgent/gmail";
+import type { ResumeVariantKey } from "@/lib/jobAgent/resumeAttachments";
 import { sendWhatsApp } from "@/lib/jobAgent/whatsapp";
 
 const EMPTY_TWIML = new Response("<?xml version=\"1.0\" encoding=\"UTF-8\"?><Response></Response>", {
@@ -40,7 +41,8 @@ export async function POST(req: Request) {
       await sendApplicationEmail(
         lead.applyEmail,
         `Application: ${lead.title} — Santanu Chatterjee`,
-        lead.draftEmail ?? ""
+        lead.draftEmail ?? "",
+        (lead.resumeVariant as ResumeVariantKey) ?? "PROCUREMENT"
       );
       await prisma.jobLead.update({ where: { id }, data: { status: "SENT" } });
       await sendWhatsApp(`Sent — application emailed for ${lead.title} at ${lead.company ?? "that company"}.`);
@@ -55,7 +57,7 @@ export async function POST(req: Request) {
     // nothing to legitimately auto-send to, so this stays a manual step.
     await prisma.jobLead.update({ where: { id }, data: { status: "SENT" } });
     await sendWhatsApp(
-      `${lead.title} at ${lead.company ?? "that company"} doesn't have a direct application email — apply here: ${lead.url}\n\nHere's the drafted email text if you want to paste it into their application form:\n\n${lead.draftEmail ?? ""}`
+      `${lead.title} at ${lead.company ?? "that company"} doesn't have a direct application email — apply here: ${lead.url}\nAttach your ${lead.resumeVariant ?? "PROCUREMENT"} resume variant.\n\nHere's the drafted email text if you want to paste it into their application form:\n\n${lead.draftEmail ?? ""}`
     );
   }
 

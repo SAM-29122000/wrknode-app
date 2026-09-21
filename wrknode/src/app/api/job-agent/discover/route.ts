@@ -6,6 +6,7 @@ import { isAuthorizedCronRequest } from "@/lib/jobAgent/cronAuth";
 import { isWithinDiscoveryWindow } from "@/lib/jobAgent/activeWindow";
 import { fetchAllListings, type RawJobListing } from "@/lib/jobAgent/jobSources";
 import { draftApplicationEmail, scoreJobMatch } from "@/lib/jobAgent/ai";
+import { selectResumeVariant } from "@/lib/jobAgent/selectResumeVariant";
 import { sendWhatsApp } from "@/lib/jobAgent/whatsapp";
 
 const MATCH_THRESHOLD = 70;
@@ -39,6 +40,7 @@ async function processListing(listing: RawJobListing) {
 
   if (score >= MATCH_THRESHOLD) {
     const draftEmail = await draftApplicationEmail(listing, suggested_emphasis);
+    const resumeVariant = selectResumeVariant(suggested_emphasis);
 
     const lead = await prisma.jobLead.create({
       data: {
@@ -52,13 +54,14 @@ async function processListing(listing: RawJobListing) {
         matchScore: score,
         reasoning,
         emphasis: suggested_emphasis,
+        resumeVariant,
         draftEmail,
         status: "PENDING",
       },
     });
 
     await sendWhatsApp(
-      `New job match (${score}%): ${lead.title} at ${lead.company ?? "unknown company"} (${lead.location ?? "location unknown"}). Source: ${lead.source}.\nReply APPLY-${lead.id} to send, or SKIP-${lead.id} to skip.\nLink: ${lead.url}`
+      `New job match (${score}%): ${lead.title} at ${lead.company ?? "unknown company"} (${lead.location ?? "location unknown"}). Source: ${lead.source}. Resume: ${resumeVariant}.\nReply APPLY-${lead.id} to send, or SKIP-${lead.id} to skip.\nLink: ${lead.url}`
     );
     return "queued" as const;
   }

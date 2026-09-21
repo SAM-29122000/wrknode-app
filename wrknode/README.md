@@ -142,6 +142,14 @@ Next.js API routes.
   confirmed by the candidate on 2026-09-21 — **keep this file and the
   resume PDFs in `Desktop/Private/resume-variants/` in sync; they must
   never contradict each other in front of an employer.**
+- The three tailored resume PDFs are embedded as base64
+  (`resumeAttachments.ts`, regenerate via the same PowerShell/headless-Edge
+  script used to build them if the PDFs change) — `selectResumeVariant.ts`
+  picks which one to attach per job by keyword-matching the AI's honest
+  `suggested_emphasis` field (SAP/ERP terms → the SAP variant, logistics/
+  import/China terms → the logistics variant, otherwise procurement). This
+  selects among three already-written, honest documents; it does not
+  generate new resume content per job.
 - Nothing is ever emailed without a human reply. `POST
   /api/job-agent/discover` (run on a schedule — see below) scores each new
   listing, and for anything scoring ≥ 70 drafts an email, saves a

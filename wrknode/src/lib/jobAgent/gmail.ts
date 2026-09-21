@@ -1,4 +1,4 @@
-import { RESUME_FILENAME, RESUME_MIME_TYPE, RESUME_PDF_BASE64 } from "./resumeAttachment";
+import { RESUME_MIME_TYPE, RESUME_VARIANTS, type ResumeVariantKey } from "./resumeAttachments";
 import { CANDIDATE_EMAIL, CANDIDATE_NAME } from "./resumeProfile";
 
 // All Gmail access here is plain REST + OAuth2 refresh-token exchange — no
@@ -44,7 +44,18 @@ function base64UrlEncode(input: string) {
     .replace(/=+$/, "");
 }
 
-function buildMimeMessage({ to, subject, body }: { to: string; subject: string; body: string }) {
+function buildMimeMessage({
+  to,
+  subject,
+  body,
+  resumeVariant,
+}: {
+  to: string;
+  subject: string;
+  body: string;
+  resumeVariant: ResumeVariantKey;
+}) {
+  const { filename, base64 } = RESUME_VARIANTS[resumeVariant];
   const boundary = "wrknode_job_agent_boundary";
   const lines = [
     `From: ${CANDIDATE_NAME} <${CANDIDATE_EMAIL}>`,
@@ -60,20 +71,25 @@ function buildMimeMessage({ to, subject, body }: { to: string; subject: string; 
     body,
     "",
     `--${boundary}`,
-    `Content-Type: ${RESUME_MIME_TYPE}; name="${RESUME_FILENAME}"`,
+    `Content-Type: ${RESUME_MIME_TYPE}; name="${filename}"`,
     "Content-Transfer-Encoding: base64",
-    `Content-Disposition: attachment; filename="${RESUME_FILENAME}"`,
+    `Content-Disposition: attachment; filename="${filename}"`,
     "",
-    RESUME_PDF_BASE64.replace(/(.{76})/g, "$1\n"),
+    base64.replace(/(.{76})/g, "$1\n"),
     "",
     `--${boundary}--`,
   ];
   return lines.join("\r\n");
 }
 
-export async function sendApplicationEmail(to: string, subject: string, body: string) {
+export async function sendApplicationEmail(
+  to: string,
+  subject: string,
+  body: string,
+  resumeVariant: ResumeVariantKey = "PROCUREMENT"
+) {
   const accessToken = await getAccessToken();
-  const raw = base64UrlEncode(buildMimeMessage({ to, subject, body }));
+  const raw = base64UrlEncode(buildMimeMessage({ to, subject, body, resumeVariant }));
 
   const res = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/messages/send", {
     method: "POST",

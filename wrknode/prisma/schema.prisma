@@ -147,8 +147,9 @@ model JobLead {
   applyEmail  String? // only set if a source ever exposes a direct recruiter/HR email; Adzuna/Jooble don't
   matchScore  Int? // 0-100, set once AI has scored it
   reasoning   String?       @db.Text
-  emphasis    String?       @db.Text // which real skill the draft leads with
-  draftEmail  String?       @db.Text
+  emphasis      String?       @db.Text // which real skill the draft leads with
+  resumeVariant String? // "PROCUREMENT" | "SAP_ERP" | "LOGISTICS" — which pre-written resume to attach
+  draftEmail    String?       @db.Text
   status      JobLeadStatus @default(NEW)
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt

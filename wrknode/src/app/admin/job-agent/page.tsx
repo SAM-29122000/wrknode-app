@@ -97,6 +97,7 @@ export default async function AdminJobAgentPage() {
               <p className="text-sm text-gray-600">
                 {lead.company ?? "Unknown company"} · {lead.location ?? "Location unknown"} ·{" "}
                 {lead.source}
+                {lead.resumeVariant && ` · Resume: ${lead.resumeVariant}`}
               </p>
               {lead.reasoning && <p className="mt-2 text-sm text-gray-700">{lead.reasoning}</p>}
               {lead.draftEmail && (
