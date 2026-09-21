@@ -8,32 +8,47 @@ export type RawJobListing = {
   url: string;
 };
 
-const SEARCH_TERMS =
-  process.env.JOB_AGENT_SEARCH_TERMS ??
-  "operations executive OR procurement OR SAP OR supply chain OR CRM operations";
+// Adzuna (and Jooble) treat "what"/"keywords" as a literal phrase/AND
+// search, NOT boolean OR — "purchase engineer OR procurement" narrows
+// results to postings containing all those words, the opposite of what
+// you'd expect. So this is a list of separate phrases, each queried on
+// its own and merged, not one OR'd string.
+const SEARCH_PHRASES = (
+  process.env.JOB_AGENT_SEARCH_TERMS ?? "purchase engineer,procurement SAP,supply chain logistics,import export"
+)
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
 
-export async function fetchAdzunaListings(): Promise<RawJobListing[]> {
+// Adzuna needs a separate API call per country. Each phrase also needs
+// its own call (no OR support — see above), so total calls per run =
+// countries x phrases. Keep both lists short on a free API tier.
+const ADZUNA_COUNTRIES = (process.env.ADZUNA_COUNTRIES ?? process.env.ADZUNA_COUNTRY ?? "in,gb,us")
+  .split(",")
+  .map((c) => c.trim().toLowerCase())
+  .filter(Boolean);
+
+async function fetchAdzunaOne(country: string, phrase: string): Promise<RawJobListing[]> {
   const appId = process.env.ADZUNA_APP_ID;
   const appKey = process.env.ADZUNA_APP_KEY;
-  const country = process.env.ADZUNA_COUNTRY ?? "in";
   if (!appId || !appKey) return [];
 
   const url = new URL(`https://api.adzuna.com/v1/api/jobs/${country}/search/1`);
   url.searchParams.set("app_id", appId);
   url.searchParams.set("app_key", appKey);
   url.searchParams.set("results_per_page", "50");
-  url.searchParams.set("what", SEARCH_TERMS);
+  url.searchParams.set("what", phrase);
   url.searchParams.set("content-type", "application/json");
 
   const res = await fetch(url.toString());
   if (!res.ok) {
-    console.error("Adzuna fetch failed:", res.status, await res.text().catch(() => ""));
+    console.error(`Adzuna fetch failed (${country}, "${phrase}"):`, res.status, await res.text().catch(() => ""));
     return [];
   }
   const data = await res.json();
 
   return (data.results ?? []).map((r: any) => ({
-    sourceId: `adzuna_${r.id}`,
+    sourceId: `adzuna_${country}_${r.id}`,
     source: "adzuna" as const,
     title: r.title,
     company: r.company?.display_name ?? null,
@@ -43,17 +58,30 @@ export async function fetchAdzunaListings(): Promise<RawJobListing[]> {
   }));
 }
 
-export async function fetchJoobleListings(): Promise<RawJobListing[]> {
+export async function fetchAdzunaListings(): Promise<RawJobListing[]> {
+  const calls: Promise<RawJobListing[]>[] = [];
+  for (const country of ADZUNA_COUNTRIES) {
+    for (const phrase of SEARCH_PHRASES) {
+      calls.push(fetchAdzunaOne(country, phrase));
+    }
+  }
+  const results = (await Promise.all(calls)).flat();
+
+  const seen = new Set<string>();
+  return results.filter((r) => (seen.has(r.sourceId) ? false : (seen.add(r.sourceId), true)));
+}
+
+async function fetchJoobleOne(phrase: string): Promise<RawJobListing[]> {
   const apiKey = process.env.JOOBLE_API_KEY;
   if (!apiKey) return [];
 
   const res = await fetch(`https://jooble.org/api/${apiKey}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ keywords: SEARCH_TERMS, location: process.env.JOOBLE_LOCATION ?? "" }),
+    body: JSON.stringify({ keywords: phrase, location: process.env.JOOBLE_LOCATION ?? "" }),
   });
   if (!res.ok) {
-    console.error("Jooble fetch failed:", res.status, await res.text().catch(() => ""));
+    console.error(`Jooble fetch failed ("${phrase}"):`, res.status, await res.text().catch(() => ""));
     return [];
   }
   const data = await res.json();
@@ -67,6 +95,13 @@ export async function fetchJoobleListings(): Promise<RawJobListing[]> {
     description: String(r.snippet ?? "").replace(/\s+/g, " ").trim(),
     url: r.link,
   }));
+}
+
+export async function fetchJoobleListings(): Promise<RawJobListing[]> {
+  const results = (await Promise.all(SEARCH_PHRASES.map(fetchJoobleOne))).flat();
+
+  const seen = new Set<string>();
+  return results.filter((r) => (seen.has(r.sourceId) ? false : (seen.add(r.sourceId), true)));
 }
 
 export async function fetchAllListings(): Promise<RawJobListing[]> {

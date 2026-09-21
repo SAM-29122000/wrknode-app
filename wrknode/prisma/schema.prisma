@@ -162,6 +162,20 @@ enum JobLeadStatus {
   SENT // user replied APPLY, email sent
 }
 
+// Dedup log for the reply monitor — Gmail's "newer_than:1d" query keeps
+// returning the same message on every poll, so without this the same
+// reply would get re-classified and re-sent to WhatsApp every 10-15
+// minutes for a full day.
+model JobReplyLog {
+  id              String   @id @default(cuid())
+  gmailMessageId  String   @unique
+  subject         String
+  fromAddress     String
+  category        String
+  summary         String   @db.Text
+  detectedAt      DateTime @default(now())
+}
+
 // --- Marketing leads (landing page) ---
 // The single source of truth for "someone submitted the lead form" —
 // replaces n8n's own internal Data Table, which duplicated this. Written

@@ -64,6 +64,7 @@ export default async function AdminJobAgentPage() {
         <div className="flex gap-3">
           <RunJobAgentButton endpoint="/api/job-agent/discover" label="Run discovery now" />
           <RunJobAgentButton endpoint="/api/job-agent/check-replies" label="Check replies now" />
+          <RunJobAgentButton endpoint="/api/job-agent/daily-summary" label="Send daily summary now" />
         </div>
       </div>
 

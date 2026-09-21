@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { isAuthorizedCronRequest } from "@/lib/jobAgent/cronAuth";
+import { isWithinDiscoveryWindow } from "@/lib/jobAgent/activeWindow";
 import { fetchAllListings } from "@/lib/jobAgent/jobSources";
 import { draftApplicationEmail, scoreJobMatch } from "@/lib/jobAgent/ai";
 import { sendWhatsApp } from "@/lib/jobAgent/whatsapp";
@@ -17,6 +18,13 @@ export async function POST(req: Request) {
 
   if (!isAdmin && !isAuthorizedCronRequest(req)) {
     return NextResponse.json({ error: "Not authorized." }, { status: 401 });
+  }
+
+  // An admin manually clicking "Run discovery now" should always work,
+  // even outside the window, for testing. The scheduled/cron path
+  // respects the 8am-12pm window.
+  if (!isAdmin && !isWithinDiscoveryWindow()) {
+    return NextResponse.json({ ok: true, skipped: "outside discovery window" });
   }
 
   const listings = await fetchAllListings();
@@ -70,6 +78,12 @@ export async function POST(req: Request) {
         },
       });
     }
+  }
+
+  if (queued > 0) {
+    await sendWhatsApp(
+      `Discovery run: checked ${listings.length} listings, scored ${scored} new ones, ${queued} queued for your approval above.`
+    );
   }
 
   return NextResponse.json({ ok: true, fetched: listings.length, scored, queued });

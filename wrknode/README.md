@@ -138,16 +138,19 @@ Next.js API routes.
   explicitly instructed to never invent or exaggerate experience — only to
   re-emphasize real, existing skills differently per job. The candidate
   summary they're given (`src/lib/jobAgent/resumeProfile.ts`) is the
-  version backed by the actual resume PDF provided (Operations Executive
-  at My Tasker, CRM/ops for UK-US clients) — **if the real current role is
-  actually different, update `resumeProfile.ts` and the resume file
-  together so they never contradict each other in front of an employer.**
+  Purchase Executive / Bauhaus / SAP international sourcing role, as
+  confirmed by the candidate on 2026-09-21 — **keep this file and the
+  resume PDFs in `Desktop/Private/resume-variants/` in sync; they must
+  never contradict each other in front of an employer.**
 - Nothing is ever emailed without a human reply. `POST
   /api/job-agent/discover` (run on a schedule — see below) scores each new
   listing, and for anything scoring ≥ 70 drafts an email, saves a
   `JobLead` row, and messages WhatsApp asking `APPLY-<id>` or `SKIP-<id>`.
   Only that WhatsApp reply (`POST /api/job-agent/whatsapp-inbound`, the
-  Twilio webhook target) triggers a send.
+  Twilio webhook target) triggers a send. **This threshold is intentionally
+  not bypassable** — re-emphasizing real skills per job is the point;
+  applying to roles that genuinely don't fit by disguising the resume is
+  not something this system will do, regardless of volume goals.
 - Adzuna/Jooble listings don't include a direct applicant email address
   (only a URL to the original posting) — so `APPLY` only auto-sends via
   Gmail when `JobLead.applyEmail` happens to be set (nothing currently
@@ -155,9 +158,29 @@ Next.js API routes.
   drafted email text to paste in yourself. This is a real limitation of
   the free job-board APIs, not a bug — don't "fix" it by inventing a
   placeholder email address to send to.
+- Adzuna and Jooble's search fields are **AND/phrase matches, not boolean
+  OR** — `"purchase engineer OR procurement"` actually narrows results
+  (it looks for postings containing all those words) rather than
+  broadening them. `JOB_AGENT_SEARCH_TERMS` is therefore a **comma-separated
+  list of phrases**, each queried separately per country and merged/deduped
+  in code (`jobSources.ts`) — never join them with " OR " in one string.
 - `POST /api/job-agent/check-replies` polls the inbox (Gmail API,
-  `newer_than:1d -from:me`), uses AI to tell a genuine job-related reply
-  from noise, and forwards a one-line summary to WhatsApp.
+  `newer_than:1d -from:me`) every run. Since that query keeps returning the
+  same messages, every message's Gmail id is checked against `JobReplyLog`
+  (unique) before being classified/notified — without this it would
+  re-notify WhatsApp for the same reply on every single poll, all day.
+- `POST /api/job-agent/discover` only actually searches/drafts between
+  `JOB_AGENT_WINDOW_START_HOUR` and `JOB_AGENT_WINDOW_END_HOUR` (IST,
+  default 8am-12pm) — a cron ping outside that window is a no-op. This
+  doesn't apply to `check-replies` or `daily-summary`, which should run
+  all day. An admin manually clicking "Run discovery now" in
+  `/admin/job-agent` bypasses the window, for testing.
+- `POST /api/job-agent/daily-summary` reports, via one WhatsApp message:
+  how many listings were found (by platform), how many were applied to
+  (with timestamps and company names), how many are still pending your
+  reply, how many were skipped, and how many genuine replies came in
+  today. Meant to be pinged once, e.g. at 12:05pm after the discovery
+  window closes.
 
 **Setup:**
 1. Get free API keys: Adzuna (developer.adzuna.com) and Jooble
@@ -180,14 +203,18 @@ Next.js API routes.
 6. In Twilio's WhatsApp Sandbox settings, set "WHEN A MESSAGE COMES IN" to
    `https://wrknode.com/api/job-agent/whatsapp-inbound`.
 7. Since Netlify doesn't run arbitrary code on a timer by itself, use a
-   free external scheduler (e.g. cron-job.org) to `POST` to:
-   - `https://wrknode.com/api/job-agent/discover` every 6 hours
-   - `https://wrknode.com/api/job-agent/check-replies` every 10-15 minutes
-   
-   both with header `x-cron-secret: <your JOB_AGENT_CRON_SECRET>`.
+   free external scheduler (e.g. cron-job.org) to `POST` to, each with
+   header `x-cron-secret: <your JOB_AGENT_CRON_SECRET>`:
+   - `https://wrknode.com/api/job-agent/discover` every 15-30 minutes,
+     all day (it no-ops itself outside the 8am-12pm window)
+   - `https://wrknode.com/api/job-agent/check-replies` every 10-15
+     minutes, all day
+   - `https://wrknode.com/api/job-agent/daily-summary` once, around
+     12:05pm
 8. Test `/api/job-agent/discover` manually first (e.g. from a REST client,
-   with that header) and confirm a WhatsApp message arrives before relying
-   on the scheduler.
+   with that header, or the "Run discovery now" button on
+   `/admin/job-agent`) and confirm a WhatsApp message arrives before
+   relying on the scheduler.
 
 **Realistic volume:** Adzuna/Jooble typically surface 10-40 genuinely new,
 relevant postings a day for one role/location combination — the system
