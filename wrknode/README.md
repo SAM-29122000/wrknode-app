@@ -164,6 +164,13 @@ Next.js API routes.
   broadening them. `JOB_AGENT_SEARCH_TERMS` is therefore a **comma-separated
   list of phrases**, each queried separately per country and merged/deduped
   in code (`jobSources.ts`) — never join them with " OR " in one string.
+- `ADZUNA_LOCATIONS` (e.g. `"in:Kolkata"`) narrows a specific country to a
+  city via Adzuna's `where` param, while countries left out of it stay
+  nationwide — this is how "Kolkata specifically" and "remote roles in
+  other countries" coexist. A narrow city + a narrow multi-word phrase
+  together can return very few results (verified: `"purchase engineer"` +
+  Kolkata → 1 result, vs. `"procurement"` alone + Kolkata → 228) — that's
+  expected sparsity, not a bug; broader single-word phrases recover volume.
 - `POST /api/job-agent/check-replies` polls the inbox (Gmail API,
   `newer_than:1d -from:me`) every run. Since that query keeps returning the
   same messages, every message's Gmail id is checked against `JobReplyLog`

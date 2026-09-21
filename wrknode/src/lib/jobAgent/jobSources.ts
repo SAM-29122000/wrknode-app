@@ -14,7 +14,8 @@ export type RawJobListing = {
 // you'd expect. So this is a list of separate phrases, each queried on
 // its own and merged, not one OR'd string.
 const SEARCH_PHRASES = (
-  process.env.JOB_AGENT_SEARCH_TERMS ?? "purchase engineer,procurement SAP,supply chain logistics,import export"
+  process.env.JOB_AGENT_SEARCH_TERMS ??
+  "purchase engineer,procurement SAP,supply chain logistics,import export,remote purchase,startup procurement"
 )
   .split(",")
   .map((s) => s.trim())
@@ -28,6 +29,22 @@ const ADZUNA_COUNTRIES = (process.env.ADZUNA_COUNTRIES ?? process.env.ADZUNA_COU
   .map((c) => c.trim().toLowerCase())
   .filter(Boolean);
 
+// Per-country city/region filter, e.g. "in:Kolkata,us:remote" — a country
+// left out (or with nothing after the colon) searches nationwide, which is
+// how "remote roles in other countries" stays broad while India narrows to
+// one city. Adzuna's "where" param is a free-text location match.
+const ADZUNA_LOCATIONS: Record<string, string> = Object.fromEntries(
+  (process.env.ADZUNA_LOCATIONS ?? "in:Kolkata")
+    .split(",")
+    .map((pair) => pair.trim())
+    .filter(Boolean)
+    .map((pair) => {
+      const [country, ...rest] = pair.split(":");
+      return [country.trim().toLowerCase(), rest.join(":").trim()];
+    })
+    .filter(([, where]) => where)
+);
+
 async function fetchAdzunaOne(country: string, phrase: string): Promise<RawJobListing[]> {
   const appId = process.env.ADZUNA_APP_ID;
   const appKey = process.env.ADZUNA_APP_KEY;
@@ -38,6 +55,8 @@ async function fetchAdzunaOne(country: string, phrase: string): Promise<RawJobLi
   url.searchParams.set("app_key", appKey);
   url.searchParams.set("results_per_page", "50");
   url.searchParams.set("what", phrase);
+  const where = ADZUNA_LOCATIONS[country];
+  if (where) url.searchParams.set("where", where);
   url.searchParams.set("content-type", "application/json");
 
   const res = await fetch(url.toString());
