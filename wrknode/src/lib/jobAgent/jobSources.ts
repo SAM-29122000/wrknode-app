@@ -15,7 +15,7 @@ export type RawJobListing = {
 // its own and merged, not one OR'd string.
 const SEARCH_PHRASES = (
   process.env.JOB_AGENT_SEARCH_TERMS ??
-  "purchase engineer,procurement SAP,supply chain logistics,import export,remote purchase,startup procurement"
+  "purchase engineer,procurement SAP,supply chain logistics,import export,remote purchase,startup procurement,graduate procurement,junior procurement,junior purchase"
 )
   .split(",")
   .map((s) => s.trim())
