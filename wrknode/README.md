@@ -119,6 +119,87 @@ in India, so this switched to Razorpay, which doesn't.)
   under Deploying below. No plans exist until you add some at
   `/admin/plans/new`.
 
+## Job application agent
+
+A personal automation for the account owner's own job search — separate
+from the wrknode business (marketing site, client portal, payments) above,
+but built on the same Next.js app, Postgres database, and Netlify
+deployment rather than a standalone n8n workflow. It replaces an earlier
+n8n + Google Sheets design (kept for reference in
+`Desktop/Private/*.json`, no longer used) with the same behavior in plain
+Next.js API routes.
+
+**Design constraints, and why:**
+- It never logs into or automates LinkedIn/Naukri/Indeed/Glassdoor —
+  all of those prohibit bot-submitted applications and detect/ban for it.
+  Jobs are sourced from Adzuna and Jooble's public search **APIs** instead
+  (`src/lib/jobAgent/jobSources.ts`).
+- The AI matching/drafting prompts (`src/lib/jobAgent/ai.ts`) are
+  explicitly instructed to never invent or exaggerate experience — only to
+  re-emphasize real, existing skills differently per job. The candidate
+  summary they're given (`src/lib/jobAgent/resumeProfile.ts`) is the
+  version backed by the actual resume PDF provided (Operations Executive
+  at My Tasker, CRM/ops for UK-US clients) — **if the real current role is
+  actually different, update `resumeProfile.ts` and the resume file
+  together so they never contradict each other in front of an employer.**
+- Nothing is ever emailed without a human reply. `POST
+  /api/job-agent/discover` (run on a schedule — see below) scores each new
+  listing, and for anything scoring ≥ 70 drafts an email, saves a
+  `JobLead` row, and messages WhatsApp asking `APPLY-<id>` or `SKIP-<id>`.
+  Only that WhatsApp reply (`POST /api/job-agent/whatsapp-inbound`, the
+  Twilio webhook target) triggers a send.
+- Adzuna/Jooble listings don't include a direct applicant email address
+  (only a URL to the original posting) — so `APPLY` only auto-sends via
+  Gmail when `JobLead.applyEmail` happens to be set (nothing currently
+  sets it). Otherwise it replies on WhatsApp with the apply link and the
+  drafted email text to paste in yourself. This is a real limitation of
+  the free job-board APIs, not a bug — don't "fix" it by inventing a
+  placeholder email address to send to.
+- `POST /api/job-agent/check-replies` polls the inbox (Gmail API,
+  `newer_than:1d -from:me`), uses AI to tell a genuine job-related reply
+  from noise, and forwards a one-line summary to WhatsApp.
+
+**Setup:**
+1. Get free API keys: Adzuna (developer.adzuna.com) and Jooble
+   (jooble.org/api/about).
+2. Create a Twilio account, activate the WhatsApp Sandbox (Messaging → Try
+   it out → Send a WhatsApp message), and from the phone in
+   `JOB_AGENT_WHATSAPP_TO` send the shown join code to the sandbox number.
+   Note the sandbox needs re-joining every 72 hours; a real WhatsApp
+   Business number (a few days' approval through Twilio) removes that.
+3. Create an OpenAI API key.
+4. Create a Google Cloud OAuth client (Desktop app type is simplest, no
+   consent-screen review needed for personal use), then mint a refresh
+   token once via
+   [developers.google.com/oauthplayground](https://developers.google.com/oauthplayground)
+   using your own client ID/secret with the `gmail.send` and
+   `gmail.readonly` scopes.
+5. Fill in every var in the "Job application agent" section of
+   `.env.example`, including `JOB_AGENT_CRON_SECRET` (any random string
+   you make up).
+6. In Twilio's WhatsApp Sandbox settings, set "WHEN A MESSAGE COMES IN" to
+   `https://wrknode.com/api/job-agent/whatsapp-inbound`.
+7. Since Netlify doesn't run arbitrary code on a timer by itself, use a
+   free external scheduler (e.g. cron-job.org) to `POST` to:
+   - `https://wrknode.com/api/job-agent/discover` every 6 hours
+   - `https://wrknode.com/api/job-agent/check-replies` every 10-15 minutes
+   
+   both with header `x-cron-secret: <your JOB_AGENT_CRON_SECRET>`.
+8. Test `/api/job-agent/discover` manually first (e.g. from a REST client,
+   with that header) and confirm a WhatsApp message arrives before relying
+   on the scheduler.
+
+**Realistic volume:** Adzuna/Jooble typically surface 10-40 genuinely new,
+relevant postings a day for one role/location combination — the system
+won't fabricate matches to hit a higher number. Broaden
+`JOB_AGENT_SEARCH_TERMS` (and `ADZUNA_COUNTRY`/`JOOBLE_LOCATION`) for more
+volume; that's the honest lever, not lowering the match threshold or the
+honesty constraints in the AI prompts.
+
+**Not built yet:** a resume-variant picker (multiple tailored resume PDFs,
+auto-selected per job), and a dashboard beyond WhatsApp + raw `JobLead`
+rows (`npx prisma studio`) for reviewing history.
+
 ## Deploying
 
 The Netlify site currently serving wrknode.com was set up via drag-and-drop
@@ -132,7 +213,8 @@ The Netlify site currently serving wrknode.com was set up via drag-and-drop
 2. Add environment variables in **Project configuration → Environment
    variables**: `DATABASE_URL`, `NEXTAUTH_SECRET`, `NEXTAUTH_URL` (set to
    `https://wrknode.com`), `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`,
-   `RAZORPAY_WEBHOOK_SECRET`.
+   `RAZORPAY_WEBHOOK_SECRET`, and — only if you want the job application
+   agent running — every var in that section's part of `.env.example`.
 3. In Razorpay, add a webhook endpoint pointing to
    `https://wrknode.com/api/razorpay/webhook`, subscribed to
    `payment.captured`, and use its signing secret for

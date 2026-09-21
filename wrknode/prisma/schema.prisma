@@ -130,6 +130,38 @@ enum PlanCtaType {
   CONTACT // send to the landing page's lead form
 }
 
+// --- Job application agent ---
+// Personal job-search automation for the account owner (not a
+// multi-tenant feature). Replaces the standalone n8n + Google Sheets
+// design with the same DB/Netlify infra this app already runs on.
+
+model JobLead {
+  id          String        @id @default(cuid())
+  source      String // "adzuna" | "jooble"
+  sourceId    String        @unique // dedupe key, e.g. "adzuna_123"
+  title       String
+  company     String?
+  location    String?
+  description String        @db.Text
+  url         String
+  applyEmail  String? // only set if a source ever exposes a direct recruiter/HR email; Adzuna/Jooble don't
+  matchScore  Int? // 0-100, set once AI has scored it
+  reasoning   String?       @db.Text
+  emphasis    String?       @db.Text // which real skill the draft leads with
+  draftEmail  String?       @db.Text
+  status      JobLeadStatus @default(NEW)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+}
+
+enum JobLeadStatus {
+  NEW // fetched, not yet scored
+  SCORED_LOW // scored below the apply threshold, no action
+  PENDING // scored well, drafted, WhatsApp notification sent, awaiting APPLY/SKIP
+  SKIPPED // user replied SKIP
+  SENT // user replied APPLY, email sent
+}
+
 // --- Marketing leads (landing page) ---
 // The single source of truth for "someone submitted the lead form" —
 // replaces n8n's own internal Data Table, which duplicated this. Written
