@@ -16,25 +16,32 @@ async function chatCompletion(messages: { role: string; content: string }[], tem
   // whatever's current instead of breaking on the next deprecation.
   const model = process.env.GEMINI_MODEL ?? "gemini-flash-lite-latest";
 
-  const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        ...(systemMessage ? { systemInstruction: { parts: [{ text: systemMessage }] } } : {}),
-        contents: [{ role: "user", parts: [{ text: userMessage }] }],
-        generationConfig: { temperature },
-      }),
-    }
-  );
+  const body = JSON.stringify({
+    ...(systemMessage ? { systemInstruction: { parts: [{ text: systemMessage }] } } : {}),
+    contents: [{ role: "user", parts: [{ text: userMessage }] }],
+    generationConfig: { temperature },
+  });
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
 
-  if (!res.ok) {
-    throw new Error(`Gemini request failed: ${res.status} ${await res.text().catch(() => "")}`);
+  // Gemini's free tier genuinely returns transient 503 "high demand"
+  // errors under normal use (observed live, not hypothetical) — retry
+  // those a couple of times with backoff rather than fail the whole
+  // discover run over one flaky call.
+  let lastError = "";
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body });
+
+    if (res.ok) {
+      const data = await res.json();
+      return data.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+    }
+
+    lastError = `Gemini request failed: ${res.status} ${await res.text().catch(() => "")}`;
+    if (res.status !== 503 || attempt === 2) break;
+    await new Promise((resolve) => setTimeout(resolve, 1000 * (attempt + 1)));
   }
 
-  const data = await res.json();
-  return data.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+  throw new Error(lastError);
 }
 
 function parseJsonLoose<T>(raw: string, fallback: T): T {

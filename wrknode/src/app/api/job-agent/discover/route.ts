@@ -35,7 +35,19 @@ async function mapWithConcurrency<T, R>(items: T[], limit: number, fn: (item: T)
   return results;
 }
 
-async function processListing(listing: RawJobListing) {
+async function processListing(listing: RawJobListing): Promise<"queued" | "scored_low" | "failed"> {
+  try {
+    return await processListingInner(listing);
+  } catch (err) {
+    // One listing failing (e.g. a Gemini call that exhausted its retries)
+    // must not take down the other 14 in this batch — it's simply left
+    // un-marked-seen, so it surfaces again on the next run.
+    console.error(`Failed to process listing ${listing.sourceId}:`, err);
+    return "failed";
+  }
+}
+
+async function processListingInner(listing: RawJobListing) {
   const { score, reasoning, suggested_emphasis } = await scoreJobMatch(listing);
 
   if (score >= MATCH_THRESHOLD) {
@@ -118,6 +130,7 @@ export async function POST(req: Request) {
 
     const outcomes = await mapWithConcurrency(newListings, CONCURRENCY, processListing);
     const queued = outcomes.filter((o) => o === "queued").length;
+    const failed = outcomes.filter((o) => o === "failed").length;
 
     if (queued > 0) {
       await sendWhatsApp(
@@ -131,6 +144,7 @@ export async function POST(req: Request) {
       newFound: listings.length - existingIds.size,
       scoredThisRun: newListings.length,
       queued,
+      failed,
     });
   } catch (err) {
     console.error("discover route failed:", err);
