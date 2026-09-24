@@ -11,15 +11,18 @@ import { sendWhatsApp } from "@/lib/jobAgent/whatsapp";
 
 const MATCH_THRESHOLD = 70;
 
-// Netlify kills this function at maxDuration. Each listing needs 1-2
-// sequential AI calls (~3-5s each), so a naive one-at-a-time loop over
-// even a modest batch of genuinely-new listings can blow past 60s (an
-// 18-listing local test took 120s). Two mitigations: only take the AI
-// calls for the top N new listings per run (the rest surface on the next
-// run — they're never marked "seen" until actually processed, so nothing
-// is silently dropped) and run those N with limited concurrency.
-const MAX_LISTINGS_PER_RUN = 15;
-const CONCURRENCY = 5;
+// Netlify kills this function at maxDuration — and does so hard: a
+// mid-flight kill returns a non-JSON response that this route's own
+// try/catch can never see or report. Confirmed live: with a cap of 15,
+// only 7 finished (visible via their DB writes) before the whole request
+// died with no error body. Each listing needs 1-2 sequential AI calls
+// (~3-5s each, more with a 503 retry), so the batch has to be small
+// enough to finish comfortably inside the limit even when a few calls
+// need retries — not sized for the best case. Unprocessed listings are
+// never marked "seen", so they simply surface again next run; nothing is
+// silently dropped, just deferred.
+const MAX_LISTINGS_PER_RUN = 6;
+const CONCURRENCY = 3;
 export const maxDuration = 60;
 
 async function mapWithConcurrency<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
