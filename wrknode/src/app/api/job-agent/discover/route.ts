@@ -98,33 +98,48 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true, skipped: "outside discovery window" });
   }
 
-  const listings = await fetchAllListings();
+  // Wrapped so a failure anywhere below returns the real error instead of
+  // an opaque 500 with an empty body — this route is only reachable by an
+  // admin session or the cron secret, so surfacing the message/stack here
+  // isn't exposing anything to the public.
+  try {
+    const listings = await fetchAllListings();
 
-  const existingIds = new Set(
-    (
-      await prisma.jobLead.findMany({
-        where: { sourceId: { in: listings.map((l) => l.sourceId) } },
-        select: { sourceId: true },
-      })
-    ).map((l) => l.sourceId)
-  );
+    const existingIds = new Set(
+      (
+        await prisma.jobLead.findMany({
+          where: { sourceId: { in: listings.map((l) => l.sourceId) } },
+          select: { sourceId: true },
+        })
+      ).map((l) => l.sourceId)
+    );
 
-  const newListings = listings.filter((l) => !existingIds.has(l.sourceId)).slice(0, MAX_LISTINGS_PER_RUN);
+    const newListings = listings.filter((l) => !existingIds.has(l.sourceId)).slice(0, MAX_LISTINGS_PER_RUN);
 
-  const outcomes = await mapWithConcurrency(newListings, CONCURRENCY, processListing);
-  const queued = outcomes.filter((o) => o === "queued").length;
+    const outcomes = await mapWithConcurrency(newListings, CONCURRENCY, processListing);
+    const queued = outcomes.filter((o) => o === "queued").length;
 
-  if (queued > 0) {
-    await sendWhatsApp(
-      `Discovery run: checked ${listings.length} listings, scored ${newListings.length} new ones, ${queued} queued for your approval above.`
+    if (queued > 0) {
+      await sendWhatsApp(
+        `Discovery run: checked ${listings.length} listings, scored ${newListings.length} new ones, ${queued} queued for your approval above.`
+      );
+    }
+
+    return NextResponse.json({
+      ok: true,
+      fetched: listings.length,
+      newFound: listings.length - existingIds.size,
+      scoredThisRun: newListings.length,
+      queued,
+    });
+  } catch (err) {
+    console.error("discover route failed:", err);
+    return NextResponse.json(
+      {
+        error: err instanceof Error ? err.message : String(err),
+        stack: err instanceof Error ? err.stack : undefined,
+      },
+      { status: 500 }
     );
   }
-
-  return NextResponse.json({
-    ok: true,
-    fetched: listings.length,
-    newFound: listings.length - existingIds.size,
-    scoredThisRun: newListings.length,
-    queued,
-  });
 }
