@@ -259,7 +259,9 @@ The Netlify site currently serving wrknode.com was set up via drag-and-drop
    `netlify.toml` that sets the base directory to `wrknode/` — Netlify's
    Next.js Runtime handles the rest automatically).
 2. Add environment variables in **Project configuration → Environment
-   variables**: `DATABASE_URL`, `NEXTAUTH_SECRET`, `NEXTAUTH_URL` (set to
+   variables**: `DATABASE_URL` (use the transaction-mode pooler — port
+   `6543` with `?pgbouncer=true` appended — see the migrations note
+   below for why), `NEXTAUTH_SECRET`, `NEXTAUTH_URL` (set to
    `https://wrknode.com`), `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`,
    `RAZORPAY_WEBHOOK_SECRET`, and — only if you want the job application
    agent running — every var in that section's part of `.env.example`.
@@ -270,8 +272,18 @@ The Netlify site currently serving wrknode.com was set up via drag-and-drop
 4. Trigger a deploy. The custom domain is already attached to this Netlify
    site, so no DNS changes are needed.
 
-**Database migrations on deploy:** `netlify.toml`'s build command runs
-`npx prisma migrate deploy` before `next build`, so any pending migration
-(like `Plan`) applies to the production database automatically on every
-deploy — no manual step needed. `migrate deploy` only applies migrations
-that haven't run yet, so it's safe to run on every build.
+**Database migrations are NOT run during the Netlify build** (changed
+2026-09-24, after every deploy from Sept 21 onward failed for this exact
+reason). `DATABASE_URL` uses Supabase's transaction-mode connection
+pooler (port 6543, `?pgbouncer=true`) — the only one reliably reachable
+from Netlify's build/runtime network — but `prisma migrate deploy` needs
+session-level advisory locks that transaction pooling breaks, so it
+doesn't error, it **hangs indefinitely**. `netlify.toml`'s build command
+is just `npm run build`.
+
+**So: run `npx prisma migrate deploy` yourself, from a machine with a
+working direct/session connection to the database, every time you add a
+migration** — before or after pushing, doesn't matter, just before the
+next deploy needs the new schema. This local `.env`'s `DATABASE_URL` can
+stay on the session-mode pooler (port 5432, no `pgbouncer` param) for
+this purpose; only Netlify's copy needs the transaction-mode one.
